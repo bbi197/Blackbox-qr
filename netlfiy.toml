@@ -1,0 +1,13 @@
+# netlify.toml
+[build]
+  command = "echo 'No build needed'"
+  publish = "public"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  directory = "functions"
+  node_bundler = "esbuild"
