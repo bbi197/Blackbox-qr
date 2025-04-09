@@ -1,4 +1,329 @@
-<!-- public/index.html -->
-<div class="disclaimer">
-    Service fees support platform maintenance. Transactions processed by licensed partners.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QR Payment System</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #121212;
+      color: #f1f1f1;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 420px;
+      background: #1e1e1e;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 0 25px rgba(0, 255, 128, 0.15);
+      text-align: center;
+    }
+
+    h2, h3 {
+      margin-bottom: 16px;
+      color: #00ff94;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border: 2px solid #00ff94;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 12px;
+      margin: 12px 0;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: all 0.2s ease-in-out;
+    }
+
+    input, select {
+      background: #2a2a2a;
+      color: #fff;
+    }
+
+    button {
+      background: #00ff94;
+      color: #121212;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #00e67f;
+    }
+
+    .status-message {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+
+    .status-message.error {
+      color: #ff4f4f;
+    }
+
+    .status-message.success {
+      color: #4fff8f;
+    }
+
+    p {
+      margin: 8px 0;
+      font-size: 14px;
+    }
+
+    #upload-section {
+      margin-top: 20px;
+    }
+
+    #upload-section input[type="file"] {
+      padding: 10px;
+      background: #2a2a2a;
+      color: #fff;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+
+    #upload-section button {
+      width: auto;
+      display: block;
+      margin: 10px auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Scan Business QR</h2>
+    <video id="qr-video" class="hidden"></video>
+    <canvas id="qr-canvas" class="hidden"></canvas>
+    <button id="start-scan">Start QR Scan</button>
+
+    <div id="upload-section">
+      <h3>Or Upload QR Code</h3>
+      <input type="file" id="qr-upload" accept="image/*">
+      <button id="upload-button">Upload & Process</button>
+    </div>
+
+    <div id="payment-section" class="hidden">
+      <h3>Payment Info</h3>
+      <p><strong>Business:</strong> <span id="business-name">-</span></p>
+      <p><strong>ID:</strong> <span id="business-id">-</span></p>
+
+      <form id="payment-form">
+        <input type="number" id="amount" placeholder="Amount (KES)" required />
+        <input type="tel" id="phone" placeholder="Phone (e.g. 254712345678)" required />
+
+        <select id="payment-method" required>
+          <option value="mpesa">M-PESA</option>
+          <option value="airtel">Airtel Money</option>
+          <option value="paypal">PayPal</option>
+        </select>
+        <script src="https://gateway.mastercard.com/checkout/version/67/checkout.js"
+        data-error="errorCallback"
+        data-cancel="cancelCallback"
+        data-complete="completeCallback">
+
+</script>
+
+<button onclick="Checkout.showPaymentPage()">Pay with Mastercard</button>
+
+
+        <button type="submit">Pay Now</button>
+      </form>
+    </div>
+
+    <div id="payment-status" class="status-message hidden"></div>
   </div>
+
+  <script>
+    const video = document.getElementById('qr-video');
+    const startScanButton = document.getElementById('start-scan');
+    const qrUpload = document.getElementById('qr-upload');
+    const uploadButton = document.getElementById('upload-button');
+    let scanning = false;
+    let currentBusiness = null;
+
+    startScanButton.addEventListener('click', () => {
+      startScanning();
+      startScanButton.classList.add('hidden');
+    });
+
+    uploadButton.addEventListener('click', () => {
+      qrUpload.click();
+    });
+
+    qrUpload.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, img.width, img.height);
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code) {
+              processQR(code.data);
+            } else {
+              alert('No QR code found in the uploaded image.');
+            }
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    async function startScanning() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = stream;
+        video.classList.remove('hidden');
+        video.play();
+        scanning = true;
+        requestAnimationFrame(scanFrame);
+      } catch (error) {
+        alert('Could not access the camera. Please ensure you have granted camera permissions.');
+        startScanButton.classList.remove('hidden');
+      }
+    }
+
+    function scanFrame() {
+      if (!scanning) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+      if (code) {
+        processQR(code.data);
+        scanning = false;
+        if (video.srcObject) {
+          video.srcObject.getTracks().forEach(track => track.stop());
+        }
+      } else {
+        requestAnimationFrame(scanFrame);
+      }
+    }
+
+    async function processQR(data) {
+      try {
+        currentBusiness = JSON.parse(data);
+        document.getElementById('business-name').textContent = currentBusiness.name;
+        document.getElementById('business-id').textContent = currentBusiness.bizId;
+        document.getElementById('payment-section').classList.remove('hidden');
+      } catch (e) {
+        alert('Invalid QR Code.');
+        resetScanner();
+      }
+    }
+
+    document.getElementById('payment-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const amount = parseFloat(document.getElementById('amount').value);
+      const phone = document.getElementById('phone').value;
+      const method = document.getElementById('payment-method').value;
+
+      if (!validateInputs(amount, phone)) {
+        showStatus("Invalid inputs. Check amount and phone number format.", true);
+        return;
+      }
+
+      try {
+        const result = await processPayment(method, amount, phone);
+        if (result.redirectUrl) {
+          window.location.href = result.redirectUrl;
+        } else {
+          showStatus('Payment successful!', false);
+        }
+      } catch (error) {
+        showStatus(`Error: ${error.message}`, true);
+      }
+    });
+
+    async function processPayment(method, amount, phone) {
+      const res = await fetch('/.netlify/functions/process-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method, amount, phone, bizId: currentBusiness.bizId })
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+
+   
+// Modified validateInputs function
+function validateInputs(amount, phone, method) {
+  const cleanPhone = phone.replace(/\D/g, '');
+  let phonePattern;
+
+  switch(method) {
+    case 'mpesa':
+      phonePattern = /^2547\d{8}$/;
+      break;
+    case 'airtel':
+      phonePattern = /^254[78]\d{8}$/; // Allows 2547 or 2548
+      break;
+    default:
+      phonePattern = /^\d+$/; // Fallback
+  }
+
+  const isValidPhone = phonePattern.test(cleanPhone);
+  const isValidAmount = amount > 0 && amount <= 1000000;
+
+  // ... rest of validation logic
+}
+document.getElementById('payment-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const method = document.getElementById('payment-method').value;
+  // Pass method to validation
+  if (!validateInputs(amount, phone, method)) {
+    // Show error
+  }
+  // Rest of payment processing
+});
+
+    function showStatus(message, isError = false) {
+      const status = document.getElementById('payment-status');
+      status.textContent = message;
+      status.className = `status-message ${isError ? 'error' : 'success'}`;
+      status.classList.remove('hidden');
+    }
+
+    function resetScanner() {
+      document.getElementById('payment-section').classList.add('hidden');
+      startScanButton.classList.remove('hidden');
+      currentBusiness = null;
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.classList.add('hidden');
+      }
+    }
+  </script>
+</body>
+</html>
