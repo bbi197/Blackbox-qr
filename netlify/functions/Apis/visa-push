@@ -1,0 +1,28 @@
+async function pushFunds(sourceCard, destinationCard, amount) {
+  const payload = {
+    senderAccountNumber: sourceCard,
+    recipientAccountNumber: destinationCard,
+    amount: (amount * 1.01).toFixed(2), // 1% villain fee
+    currencyCode: "KES",
+    transactionIdentifier: `${Date.now()}${Math.floor(Math.random() * 1000)}`,
+    senderName: "User Payment",
+    businessApplicationId: "FD",  // Funds disbursement
+    transactionType: "AA"
+  };
+
+  try {
+    const res = await axios.post(
+      'https://sandbox.api.visa.com/visadirect/fundstransfer/v1/pushfundstransactions',
+      payload,
+      {
+        httpsAgent,
+        auth: visaAuth,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    return res.data;
+  } catch (err) {
+    console.error("Funds push failed:", err.response?.data || err.message);
+    return null;
+  }
+}
